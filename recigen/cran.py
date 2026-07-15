@@ -7,7 +7,7 @@ from .utils import  get_pkg_sha256
 import pprint
 from packaging.version import parse as parse_version    
 import re
-
+from .r_utils import r_builtin_packages
 
 
 # Creates a '.my_cache' directory in your project folder
@@ -126,13 +126,7 @@ def guess_repo(cran_data):
         for url in urls:
             if keyword in url.lower():
                 return url
-                
-    # 2. Fallback: Check if the package is explicitly hosted on the main CRAN repo
-    if cran_data.get("Repository") == "CRAN":
-        return "CRAN"
-        
-    return "Unknown"
-
+    return None
 
 def guess_homepage(cran_data):
     """
@@ -142,7 +136,7 @@ def guess_homepage(cran_data):
     """
     urls = _extract_urls(cran_data)
     if not urls:
-        return "Unknown"
+        return None
         
     # 1. Look for dedicated documentation/pkgdown homepages first (usually ends in .github.io, r-lib, etc.)
     # and avoid returning raw GitHub repositories as the "homepage" if a doc site exists.
@@ -249,6 +243,8 @@ def cran_pkg_name_to_conda_name(cran_name):
     
     return conda_name
 
+
+
 def extract_dependencies(cran_data):
     # only use imports
     imports = cran_data.get("Imports", "")
@@ -258,6 +254,9 @@ def extract_dependencies(cran_data):
         ret = []
         # Split imports by comma and strip whitespace
         for name, version in imports.items():
+            if name in r_builtin_packages:
+                print(f"Skipping built-in R package: {name}")
+                continue
             print(f"Dependency: {name}, Version: {version}")
             conda_name = cran_pkg_name_to_conda_name(name)
             print(f"Converted to conda name: {conda_name}")
@@ -281,6 +280,11 @@ def make_licence_file_filename(license_name):
         return "TODO"  # Default case for unknown licenses
 
 
+def form_requirement(name, versioning_string):
+    if versioning_string == "*":
+        return name
+    else:
+        return f"{name} {versioning_string}"
 
 def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
 
@@ -337,10 +341,14 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     # about section
     ###########################
     # handle repo
-    template["about"]["repository"] = guess_repo(metadata)
+    repo = guess_repo(metadata)
+    if repo is not None:
+        template["about"]["repository"] = repo
 
     # homepage
-    template["about"]["homepage"] = guess_homepage(metadata)    
+    homepage = guess_homepage(metadata)
+    if homepage is not None:
+        template["about"]["homepage"] = homepage
 
     
     # license and license_family
@@ -348,7 +356,7 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     template["about"]["license"] = license_info["license"]
     template["about"]["license_family"] = license_info["license_family"]
     
-    # load license file from licence folder
+
     template["about"]["license_file"] = [R"${{ PREFIX }}/lib/R/share/licenses/" + make_licence_file_filename(license_info["license"])]
     
 
@@ -368,9 +376,12 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
        template["requirements"]["run"] = []
        for dep_name, dep_version in dependencies:
            # add the dependency to the run section
-           template["requirements"]["build"].append(f"{dep_name} {dep_version}")
-           template["requirements"]["host"].append(f"{dep_name} {dep_version}")
-           template["requirements"]["run"].append(f"{dep_name} {dep_version}")
+           req = form_requirement(dep_name, dep_version)
+           template["requirements"]["build"].append(req)
+           template["requirements"]["run"].append(req)
+           template["requirements"]["host"].append(req)
+
+
 
     ##############################
     # test-section
