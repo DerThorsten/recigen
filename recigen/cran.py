@@ -46,10 +46,8 @@ def get_cran_data(package_name):
     cran_db = _get_cran_database()
 
     if package_name not in cran_db:
-        print(f"Package '{package_name}' not found in CRAN database.")
-        return {"error": f"Package '{package_name}' not found on CRAN."}
+        raise ValueError(f"Package '{package_name}' not found in CRAN database.")
 
-    print(f"Retrieved metadata for '{package_name}' from cached CRAN database.")
     return cran_db[package_name]
 
 
@@ -254,7 +252,6 @@ def cran_pkg_name_to_conda_name(cran_name):
 def extract_dependencies(cran_data):
     # only use imports
     imports = cran_data.get("Imports", "")
-    print(f"Extracted Imports for {cran_data.get('Package')}: {imports}")
     if not imports:
         return []
     else:
@@ -286,7 +283,6 @@ def make_licence_file_filename(license_name):
 
 
 def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
-    print(f"Generating R recipe for {name} of type {package_type}")
 
 
     # generate a save lower case version of the package name for the output directory   
@@ -312,12 +308,6 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
 
     # extract the highest version if not provided, otherwise
     # ensure user provided version is valid
-   
-
-
-
-    print(f"Metadata for {name}:")
-    pprint.pprint(metadata)
 
 
     cran_name = metadata.get("Package")
@@ -332,8 +322,6 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     pkg_blob = download_pkg(metadata)
     sha256 = get_pkg_sha256(pkg_blob)
 
-
-    print("template:", template)
 
     # replace context/name and context/version in the template
     template["context"]["name"] = cran_name
