@@ -7,7 +7,7 @@ from .utils import  get_pkg_sha256
 import pprint
 from packaging.version import parse as parse_version    
 import re
-from .r_utils import r_builtin_packages
+from .r_utils import  r_ignorable_dependencies
 
 
 # Creates a '.my_cache' directory in your project folder
@@ -246,15 +246,19 @@ def cran_pkg_name_to_conda_name(cran_name):
 
 
 def extract_dependencies(cran_data):
-    # only use imports
-    imports = cran_data.get("Imports", "")
-    if not imports:
+    pprint.pprint(cran_data)
+    # we need to look ad imports and depends, but not suggests or enhances
+    imports_deps = cran_data.get("Imports", {})
+    depends_deps = cran_data.get("Depends", {})
+
+    import_and_deps = {**imports_deps, **depends_deps}
+    if not import_and_deps:
         return []
     else:
         ret = []
         # Split imports by comma and strip whitespace
-        for name, version in imports.items():
-            if name in r_builtin_packages:
+        for name, version in import_and_deps.items():
+            if name in r_ignorable_dependencies:
                 print(f"Skipping built-in R package: {name}")
                 continue
             print(f"Dependency: {name}, Version: {version}")
