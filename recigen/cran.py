@@ -8,7 +8,10 @@ import pprint
 from packaging.version import parse as parse_version    
 import re
 from .r_utils import  r_ignorable_dependencies
+from textwrap import indent
 
+import requests
+from bs4 import BeautifulSoup
 
 # Creates a '.my_cache' directory in your project folder
 cache = Cache(".emscripten_forge_cran_cache")
@@ -246,7 +249,6 @@ def cran_pkg_name_to_conda_name(cran_name):
 
 
 def extract_dependencies(cran_data):
-    pprint.pprint(cran_data)
     # we need to look ad imports and depends, but not suggests or enhances
     imports_deps = cran_data.get("Imports", {})
     depends_deps = cran_data.get("Depends", {})
@@ -268,6 +270,52 @@ def extract_dependencies(cran_data):
 
         return ret
 
+
+
+
+def extract_cran_examples(pkg):
+    """
+    Extract all Examples sections from a CRAN package reference manual.
+
+    Parameters
+    ----------
+    pkg : str
+        CRAN package name.
+
+    Returns
+    -------
+    list of dict
+        Each dict has:
+            - function: function/topic name
+            - example: example code as a string
+    """
+    url = f"https://cran.r-project.org/web/packages/{pkg}/refman/{pkg}.html"
+
+    response = requests.get(url)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    examples = []
+
+    for h3 in soup.find_all("h3"):
+        if h3.get_text(strip=True) != "Examples":
+            continue
+
+        code = h3.find_next("code")
+        if code is None:
+            continue
+
+        # Find the nearest preceding h2, which contains the function/topic name
+        h2 = h3.find_previous("h2")
+        function = h2.get_text(" ", strip=True) if h2 else None
+
+        examples.append({
+            "function": function,
+            "example": code.get_text()
+        })
+
+    return examples
 
 
 def make_licence_file_filename(license_name):
@@ -390,12 +438,38 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     ##############################
     # test-section
     ##############################
-    # generate unit test file
-    content = f"library({cran_name})"
+
+
+
+
+
     with open(outdir / f"test_{cran_name}.R", "w") as f:
+        # generate unit test file
+        content = f"library({cran_name})"
+
+
+
         f.write(content)
 
-        
+
+        # try to extract examples from the CRAN reference manual
+        examples = extract_cran_examples(cran_name)
+
+        # filter out all examples containing "Not run" or "dontrun" (case insensitive)
+        examples = [ex for ex in examples if not re.search(r"Not run|dontrun", ex["example"], re.IGNORECASE)]
+
+        for i, example in enumerate(examples, start=1):
+            ex = indent(example["example"].rstrip(), "    ")
+
+            f.write(f"test_{i} <- function() {{\n")
+            f.write(ex)
+            f.write("\n}\n\n")
+
+        # Run all tests
+        for i in range(1, len(examples) + 1):
+            f.write(f'cat("Running test_{i}\\n")\n')
+            f.write(f"test_{i}()\n\n")
+    
     ##############################
     # extra section
     ##############################
@@ -414,3 +488,6 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     with open(recipe_path, "w") as f:
         yaml.dump(template, f)
 
+
+
+    
