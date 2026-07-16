@@ -1,3 +1,5 @@
+from textwrap import indent
+
 import requests
 from diskcache import Cache
 from pathlib import Path
@@ -8,8 +10,9 @@ import pprint
 from packaging.version import parse as parse_version    
 import re
 from .r_utils import  r_ignorable_dependencies
-from textwrap import indent
-
+import io
+import tarfile
+import tempfile
 import requests
 from bs4 import BeautifulSoup
 
@@ -333,10 +336,34 @@ def make_licence_file_filename(license_name):
 
 
 def form_requirement(name, versioning_string):
+    versioning_string = versioning_string.replace("-", "_")
     if versioning_string == "*":
         return name
     else:
         return f"{name} {versioning_string}"
+
+def inspect_sources(pkg_dir):
+    """
+    Inspects the source directory of an R package to determine if it contains C/C++ or Fortran code.
+
+    Parameters
+    ----------
+    pkg_dir : str or Path
+        Path to the root directory of the R package source.
+
+    Returns
+    -------
+    dict
+        A dictionary with keys 'has_c_cpp' and 'has_fortran', indicating the presence of C/C++ and Fortran code, respectively.
+    """
+    pkg_dir = Path(pkg_dir)
+    has_c_cpp = any(pkg_dir.rglob("*.c")) or any(pkg_dir.rglob("*.cpp")) or any(pkg_dir.rglob("*.cc"))
+    has_fortran = any(pkg_dir.rglob("*.f")) or any(pkg_dir.rglob("*.f90")) or any(pkg_dir.rglob("*.f95"))
+
+    return {
+        "has_fortran": has_fortran
+    }
+
 
 def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
 
@@ -377,6 +404,16 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     version = metadata.get("Version")
     pkg_blob = download_pkg(metadata)
     sha256 = get_pkg_sha256(pkg_blob)
+
+    # untargz
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with tarfile.open(fileobj=io.BytesIO(pkg_blob), mode="r:gz") as tar:
+            tar.extractall(path=tmpdir, filter="data")
+        
+        
+        has_fortran = inspect_sources(tmpdir).get("has_fortran", False)
+        print(f"Package {cran_name} has Fortran code: {has_fortran}")
+
 
 
     # replace context/name and context/version in the template
@@ -423,6 +460,9 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     # requirements section
     ############################
     dependencies = extract_dependencies(metadata)
+    if has_fortran:
+        template["requirements"]["build"].append("${{ compiler('fortran') }}")
+        template["requirements"]["host"].append("libflang")
     if(dependencies):
        # add run section to dependencies
        template["requirements"]["run"] = []
@@ -445,7 +485,7 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
 
     with open(outdir / f"test_{cran_name}.R", "w") as f:
         # generate unit test file
-        content = f"library({cran_name})"
+        content = f"library({cran_name})\n"
 
 
 
