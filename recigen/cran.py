@@ -20,6 +20,12 @@ from bs4 import BeautifulSoup
 cache = Cache(".emscripten_forge_cran_cache")
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+
 
 @cache.memoize(expire=604800)
 def _get_cran_database():
@@ -30,14 +36,14 @@ def _get_cran_database():
     """
     url = "https://crandb.r-pkg.org/-/all"
 
-    print("Downloading full CRAN package database:")
-    print(" * this may take a while (tens of MBs) and can take up to 2 minutes depending on your connection.")
-    print(" * the result will be cached for 7 days, so this will only happen once per week.")
+    logger.info("Downloading full CRAN package database:")
+    logger.info(" * this may take a while (tens of MBs) and can take up to 2 minutes depending on your connection.")
+    logger.info(" * the result will be cached for 7 days, so this will only happen once per week.")
     response = requests.get(url, timeout=120)
     response.raise_for_status()
 
     data = response.json()
-    print(f"Loaded metadata for {len(data):,} CRAN packages.")
+    logger.info(f"Loaded metadata for {len(data):,} CRAN packages.")
 
     return data
 
@@ -154,10 +160,29 @@ def guess_homepage(cran_data):
     # 2. Fallback: If only git repo URLs are left, return the first one
     return urls[0]
 
+
+to_remove = ["file LICENSE", "file LICENCE", "file COPYING", "file COPYRIGHT", "file README", "file README.md", "file README.txt"]
+
+def process_license_string(license_string):
+    # split or'ed licenses into a list
+    if not license_string:
+        return None
+    splitted = license_string.split("|")
+    splitted = [lic.strip() for lic in splitted if lic.strip()]
+    splitted = [lic for lic in splitted if not any(to_remove_item.lower() in lic.lower() for to_remove_item in to_remove)]
+    if len(splitted) == 0:
+        return None
+    return splitted[0]  # Return the first 
+
+
+
 def get_spdx_and_family(cran_data):
     cran_license = cran_data.get("License", "").strip()
+    cran_license = process_license_string(cran_license)
     if not cran_license:
         return {"license": "Unknown", "license_family": "Unknown"}
+    
+    logger.info(f"Mapping CRAN license '{cran_license}' to SPDX and family...")
 
     # 1. Clean up CRAN noise (+ file LICENSE, etc.)
     cleaned = re.sub(r"\s*\+\s*file\s+LICENSE", "", cran_license, flags=re.IGNORECASE)
@@ -264,11 +289,9 @@ def extract_dependencies(cran_data):
         # Split imports by comma and strip whitespace
         for name, version in import_and_deps.items():
             if name in r_ignorable_dependencies:
-                print(f"Skipping built-in R package: {name}")
                 continue
-            print(f"Dependency: {name}, Version: {version}")
             conda_name = cran_pkg_name_to_conda_name(name)
-            print(f"Converted to conda name: {conda_name}")
+            logger.info(f"Adding dep. {name} as {conda_name}: {version}")
             ret.append((conda_name, version))
 
         return ret
@@ -412,7 +435,7 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
         
         
         has_fortran = inspect_sources(tmpdir).get("has_fortran", False)
-        print(f"Package {cran_name} has Fortran code: {has_fortran}")
+        logger.info(f"Package {cran_name} has Fortran code: {has_fortran}")
 
 
 

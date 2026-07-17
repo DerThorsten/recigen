@@ -4,6 +4,7 @@ from .package_type import PackageType
 from .generate import generate_recipe
 from .default_maintainer import get_default_maintainer
 from pathlib import Path
+import logging
 
 
 
@@ -27,10 +28,11 @@ def main():
     parser.add_argument("--maintainer", help="name of the maintainer of the package for which we want to generate the recipe", default=get_default_maintainer(), type=str)
     parser.add_argument("--version", help="version of the package for which we want to generate the recipe, if not provided, the latest version will be used")
 
-    
+    # log level
+    parser.add_argument("--log-level", help="set the log level (default: INFO)", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
     
     args = parser.parse_args()
-
+    logging.basicConfig(level=getattr(logging, args.log_level))
 
 
     # make sure type a PackageType enum
