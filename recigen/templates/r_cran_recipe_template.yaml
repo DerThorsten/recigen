@@ -41,7 +41,6 @@ about:
   documentation: https://cran.r-project.org/web/packages/${{ name }}/refman/${{ name }}.html
   repository: https://cran.r-project.org/package=${{ name }}
   license: TODO
-  license_family: TODO
   license_file: TODO
   summary: TODO
   description: |

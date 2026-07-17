@@ -5,7 +5,8 @@ from diskcache import Cache
 from pathlib import Path
 from ruamel.yaml import YAML
 import yaml
-from .utils import  get_pkg_sha256
+from ..utils import  get_pkg_sha256
+from .licences import get_rpkg_licence_information
 import pprint
 from packaging.version import parse as parse_version    
 import re
@@ -161,103 +162,6 @@ def guess_homepage(cran_data):
     return urls[0]
 
 
-to_remove = ["file LICENSE", "file LICENCE", "file COPYING", "file COPYRIGHT", "file README", "file README.md", "file README.txt"]
-
-def process_license_string(license_string):
-    # split or'ed licenses into a list
-    if not license_string:
-        return None
-    splitted = license_string.split("|")
-    splitted = [lic.strip() for lic in splitted if lic.strip()]
-    splitted = [lic for lic in splitted if not any(to_remove_item.lower() in lic.lower() for to_remove_item in to_remove)]
-    if len(splitted) == 0:
-        return None
-    return splitted[0]  # Return the first 
-
-
-
-def get_spdx_and_family(cran_data):
-    cran_license = cran_data.get("License", "").strip()
-    cran_license = process_license_string(cran_license)
-    if not cran_license:
-        return {"license": "Unknown", "license_family": "Unknown"}
-    
-    logger.info(f"Mapping CRAN license '{cran_license}' to SPDX and family...")
-
-    # 1. Clean up CRAN noise (+ file LICENSE, etc.)
-    cleaned = re.sub(r"\s*\+\s*file\s+LICENSE", "", cran_license, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*\|\s*file\s+LICENSE", "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.replace("file LICENSE", "").strip()
-
-    # 2. Comprehensive mapping table: { CRAN_STRING: (SPDX_ID, FAMILY) }
-    license_mapping = {
-        # GPL family
-        "GPL-2": ("GPL-2.0-only", "GPL"),
-        "GPL-3": ("GPL-3.0-only", "GPL"),
-        "GPL (>= 2)": ("GPL-2.0-or-later", "GPL"),
-        "GPL (>= 3)": ("GPL-3.0-or-later", "GPL"),
-        "GPL-2 | GPL-3": ("GPL-2.0-or-later", "GPL"),
-        
-        # LGPL family
-        "LGPL-2": ("LGPL-2.0-only", "LGPL"),
-        "LGPL-2.1": ("LGPL-2.1-only", "LGPL"),
-        "LGPL-3": ("LGPL-3.0-only", "LGPL"),
-        "LGPL (>= 2)": ("LGPL-2.0-or-later", "LGPL"),
-        "LGPL (>= 2.1)": ("LGPL-2.1-or-later", "LGPL"),
-        "LGPL (>= 3)": ("LGPL-3.0-or-later", "LGPL"),
-        "LGPL-2 | LGPL-3": ("LGPL-2.0-or-later", "LGPL"),
-        
-        # AGPL family
-        "AGPL-3": ("AGPL-3.0-only", "AGPL"),
-        "AGPL (>= 3)": ("AGPL-3.0-or-later", "AGPL"),
-        
-        # BSD & MIT family
-        "MIT": ("MIT", "MIT"),
-        "BSD_2_clause": ("BSD-2-Clause", "BSD"),
-        "BSD_3_clause": ("BSD-3-Clause", "BSD"),
-        
-        # Apache & Creative Commons
-        "Apache License 2.0": ("Apache-2.0", "Apache"),
-        "Apache License (== 2.0)": ("Apache-2.0", "Apache"),
-        "CC0": ("CC0-1.0", "CC0"),
-    }
-
-    # 3. Direct Match Check
-    if cleaned in license_mapping:
-        spdx, family = license_mapping[cleaned]
-        return {"license": spdx, "license_family": family}
-
-    # 4. Handle logical ORs (e.g. "GPL-2 | GPL-3")
-    if " | " in cleaned:
-        parts = [p.strip() for p in cleaned.split("|")]
-        # Pull SPDX and Family mapping for each part if they exist
-        mapped_parts = [license_mapping.get(p) for p in parts if p in license_mapping]
-        
-        if len(mapped_parts) == len(parts):
-            spdx_list = [item[0] for item in mapped_parts]
-            family_list = sorted(list(set(item[1] for item in mapped_parts))) # Unique families
-            
-            return {
-                "license": " OR ".join(spdx_list),
-                "license_family": " or ".join(family_list) if len(family_list) > 1 else family_list[0]
-            }
-
-    # 5. Fallback: Parse family string from cleaned text if not in dict
-    fallback_family = "Unknown"
-    for keyword in ["GPL", "LGPL", "AGPL", "BSD", "MIT", "Apache", "CC0"]:
-        if keyword in cleaned.upper():
-            fallback_family = keyword
-            break
-
-    return {
-        "license": f"LicenseRef-{cleaned}" if cleaned else "Unknown",
-        "license_family": fallback_family
-    }
-
-
-
-
-
 
 def cran_pkg_name_to_conda_name(cran_name):
     """
@@ -344,20 +248,6 @@ def extract_cran_examples(pkg):
     return examples
 
 
-def make_licence_file_filename(license_name):
-    #  GPL-2.0-or-later will be mapped to GPL-2
-    if license_name.startswith("GPL-2"):
-        return "GPL-2"
-    elif license_name.startswith("GPL-3"):
-        return "GPL-3"
-    elif license_name.startswith("LGPL-2"):
-        return "LGPL-2"
-    elif license_name.startswith("LGPL-3"):
-        return "LGPL-3"
-    else:
-        return "TODO"  # Default case for unknown licenses
-
-
 def form_requirement(name, versioning_string):
     versioning_string = versioning_string.replace("-", "_")
     if versioning_string == "*":
@@ -399,7 +289,7 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
 
 
     # load the template for the recipe.yaml
-    template_path = Path(__file__).parent / "templates" / "r_cran_recipe_template.yaml"
+    template_path = Path(__file__).parent.parent / "templates" / "r_cran_recipe_template.yaml"
     
     # Initialize the YAML round-trip parser
     yaml = YAML()
@@ -464,12 +354,10 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
 
     
     # license and license_family
-    license_info = get_spdx_and_family(metadata)
-    template["about"]["license"] = license_info["license"]
-    template["about"]["license_family"] = license_info["license_family"]
-    
+    license, license_filenames = get_rpkg_licence_information(cran_license_string=metadata.get("License", ""), outdir=outdir)
 
-    template["about"]["license_file"] = [R"${{ PREFIX }}/lib/R/share/licenses/" + make_licence_file_filename(license_info["license"])]
+    template["about"]["license"] = license
+    template["about"]["license_file"] = license_filenames
     
 
     # summary (lets use the title as summary)
