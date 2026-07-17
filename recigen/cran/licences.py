@@ -139,6 +139,8 @@ def get_rpkg_licence_information(cran_license_string, outdir):
                 else:
                     filename = f"TODO_add_license_file_for_{spdx_license}"
                     filenames.append(filename)  
+    if len(licenses)> 1:
+        logger.warning(f"Multiple licenses found for cran_license_string={cran_license_string}. Using the first one: {licenses[0]}")
     
-    return licenses, filenames
+    return licenses[0], filenames
         
