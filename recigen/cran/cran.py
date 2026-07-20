@@ -181,25 +181,50 @@ def cran_pkg_name_to_conda_name(cran_name):
 
 
 def extract_dependencies(cran_data):
+
+    build_deps = dict()
+    run_deps = dict()
+    host_deps = dict()
+
+
+
+    # run dependencies
     # we need to look ad imports and depends, but not suggests or enhances
     imports_deps = cran_data.get("Imports", {})
     depends_deps = cran_data.get("Depends", {})
-
     import_and_deps = {**imports_deps, **depends_deps}
     if not import_and_deps:
         return []
     else:
         ret = []
-        # Split imports by comma and strip whitespace
         for name, version in import_and_deps.items():
             if name in r_ignorable_dependencies:
                 continue
             conda_name = cran_pkg_name_to_conda_name(name)
-            logger.info(f"Adding dep. {name} as {conda_name}: {version}")
-            ret.append((conda_name, version))
+            logger.info(f"Adding run  dep. {name} as {conda_name}: {version}")
+            run_deps[conda_name] = version
 
-        return ret
+    
+    # host deps LinkingTo
+    linking_to = cran_data.get("LinkingTo", {})
+    logger.debug(f"linking to {linking_to}")
+    for name, version in linking_to.items():
+        if name in r_ignorable_dependencies:
+            continue
+        conda_name = cran_pkg_name_to_conda_name(name)
+        logger.info(f"Adding host dep. {name} as {conda_name}: {version}")
+        host_deps[conda_name] = version
+        
 
+    # build deps 
+    # TODO, only after moving the fortran detection here,
+    # we can fill these
+
+    return dict(
+        build=build_deps,
+        host=host_deps,
+        run=run_deps
+    )
 
 
 
@@ -370,20 +395,24 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     ############################
     # requirements section
     ############################
-    dependencies = extract_dependencies(metadata)
+    deps = extract_dependencies(metadata)
+
+    # for cross-compiulati
+    deps['host'].update(deps['run'])
+    deps['build'].update(deps['host'])
+
+    if(deps['run']):
+        template["requirements"]["run"] = []
+
     if has_fortran:
         template["requirements"]["build"].append("${{ compiler('fortran') }}")
         template["requirements"]["host"].append("libflang")
-    if(dependencies):
-       # add run section to dependencies
-       template["requirements"]["run"] = []
-       for dep_name, dep_version in dependencies:
-           # add the dependency to the run section
-           req = form_requirement(dep_name, dep_version)
-           template["requirements"]["build"].append(req)
-           template["requirements"]["run"].append(req)
-           template["requirements"]["host"].append(req)
 
+    for dep_type, dependencies in deps.items():
+        logger.debug(f"{dependencies =}")
+        for dep_name, dep_version in dependencies.items():
+            req = form_requirement(dep_name, dep_version)
+            template["requirements"][dep_type].append(req)
 
 
     ##############################
