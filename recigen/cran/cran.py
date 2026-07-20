@@ -395,12 +395,11 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
 
 
     with open(outdir / f"test_{cran_name}.R", "w") as f:
+
         # generate unit test file
-        content = f"library({cran_name})\n"
-
-
-
-        f.write(content)
+        f.write(f"print('Loading {cran_name} package')\n")
+        f.write(f"library({cran_name})\n")
+        f.write(f"print('... {cran_name} package loaded successfully')\n\n")
 
 
         # try to extract examples from the CRAN reference manual
@@ -418,7 +417,7 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
 
         # Run all tests
         for i in range(1, len(examples) + 1):
-            f.write(f'cat("Running test_{i}\\n")\n')
+            f.write(f'print("Running test_{i}")\n')
             f.write(f"test_{i}()\n\n")
     
     ##############################

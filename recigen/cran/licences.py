@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import re
 
 
 import logging
@@ -96,6 +97,8 @@ No restrictions on distribution or use other than those imposed by relevant laws
 See https://cran.r-project.org/doc/manuals/r-release/R-exts.html#Licensing
 """
 
+
+
 def get_rpkg_licence_information(cran_license_string, outdir):
 
     logger.debug(f"cran_license_string={cran_license_string}")
@@ -112,15 +115,20 @@ def get_rpkg_licence_information(cran_license_string, outdir):
     # explict licenses like  | file LICENCE
     filenames = []
 
-    # split the license string by " | " to handle multiple licenses
-    license_strings = cran_license_string.split("|")
+    # split the license string by "|"  or "+"
+    and_split = '+' in cran_license_string
+    license_strings = cran_license_string.replace('+', '|').split('|')
 
+    
     # strip whitespace and parentheses from each license
     license_strings = [license_str.strip() for license_str in license_strings]
 
+    logger.debug(f"found these {license_strings}")
     
     for license_str in license_strings:
-        if "file LICENCE" in license_str:
+        if 'file LICENSE' in license_str: 
+            filenames.append("LICENSE")
+        elif 'file LICENCE' in license_str:
             filenames.append("LICENCE")
         else:
             spdx_license = spdx_license_mapping.get(license_str, license_str)
@@ -135,7 +143,7 @@ def get_rpkg_licence_information(cran_license_string, outdir):
                 # r ships certain licences
                 shipped_license_file = spdx_license_to_r_base_shipped_license_file.get(spdx_license)
                 if shipped_license_file:
-                    filenames.append(shipped_license_file)
+                    filenames.append(R"${{ PREFIX }}/lib/R/share/licenses/" + shipped_license_file)
                 else:
                     filename = f"TODO_add_license_file_for_{spdx_license}"
                     filenames.append(filename)  
@@ -143,4 +151,4 @@ def get_rpkg_licence_information(cran_license_string, outdir):
         logger.warning(f"Multiple licenses found for cran_license_string={cran_license_string}. Using the first one: {licenses[0]}")
     
     return licenses[0], filenames
-        
+         
