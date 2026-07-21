@@ -185,6 +185,11 @@ def extract_dependencies(cran_data):
     build_deps = dict()
     run_deps = dict()
     host_deps = dict()
+    ret =  dict(
+        build=build_deps,
+        host=host_deps,
+        run=run_deps
+    )
 
 
 
@@ -194,9 +199,8 @@ def extract_dependencies(cran_data):
     depends_deps = cran_data.get("Depends", {})
     import_and_deps = {**imports_deps, **depends_deps}
     if not import_and_deps:
-        return []
+        return ret
     else:
-        ret = []
         for name, version in import_and_deps.items():
             if name in r_ignorable_dependencies:
                 continue
