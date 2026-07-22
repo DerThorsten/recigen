@@ -1,5 +1,6 @@
 from textwrap import indent
-
+from packaging.version import Version
+import re
 import requests
 from diskcache import Cache
 from pathlib import Path
@@ -10,12 +11,21 @@ from .licences import get_rpkg_licence_information
 import pprint
 from packaging.version import parse as parse_version    
 import re
-from .r_utils import  r_ignorable_dependencies
+from .r_utils import  (
+    r_ignorable_dependencies,
+    dowload_pkg_from_cran
+)
 import io
 import tarfile
 import tempfile
 import requests
+import gzip
 from bs4 import BeautifulSoup
+import subprocess
+import pandas as pd
+import email
+
+from .get_pkg_description import get_pkg_description
 
 # Creates a '.my_cache' directory in your project folder
 cache = Cache(".emscripten_forge_cran_cache")
@@ -28,86 +38,6 @@ logger = logging.getLogger(__name__)
 
 
 
-@cache.memoize(expire=604800)
-def _get_cran_database():
-    """
-    Downloads the full CRAN package metadata database from CRANDB.
-
-    The result is cached for 7 days (168 hours).
-    """
-    url = "https://crandb.r-pkg.org/-/all"
-
-    logger.info("Downloading full CRAN package database:")
-    logger.info(" * this may take a while (tens of MBs) and can take up to 2 minutes depending on your connection.")
-    logger.info(" * the result will be cached for 7 days, so this will only happen once per week.")
-    response = requests.get(url, timeout=120)
-    response.raise_for_status()
-
-    data = response.json()
-    logger.info(f"Loaded metadata for {len(data):,} CRAN packages.")
-
-    return data
-
-
-def get_cran_data(package_name):
-    """
-    Returns the metadata for a single CRAN package from the cached
-    CRAN database.
-    """
-    package_name = package_name.strip()
-
-    cran_db = _get_cran_database()
-
-    if package_name not in cran_db:
-        raise ValueError(f"Package '{package_name}' not found in CRAN database.")
-
-    return cran_db[package_name]
-
-
-
-
-def get_highest_version(pkg_data):
-    timeline = pkg_data.get("timeline", {})
-    if not timeline:
-        return None
-
-    return max(
-        timeline,
-        key=lambda v: parse_version(v.replace("-", "."))
-    )
-
-def ensure_version(pkg_data, desired_version=None):
-    
-    timeline = pkg_data["timeline"]
-    if desired_version is None:
-        return get_highest_version(pkg_data)
-
-    if desired_version in timeline:
-        return desired_version
-    else:
-        raise ValueError(f"Version {desired_version} not found for package {pkg_data.get('Package')}.")
-    
-
-
-@cache.memoize(expire=36000)  # Caches results for 1 hour (3600 seconds)
-def download_pkg(cran_data):
-    version = cran_data.get("Version")
-    name = cran_data.get("Package")
-    if not version or not name:
-        raise ValueError("CRAN data must contain 'Package' and 'Version' fields.")
-    cran_url_templates = [
-        f"https://cran.r-project.org/src/contrib/{name}_{version}.tar.gz",
-        f"https://cloud.r-project.org/src/contrib/{name}_{version}.tar.gz",
-        f"https://cran.r-project.org/src/contrib/Archive/{name}/{name}_{version}.tar.gz"
-    ]
-    for url in cran_url_templates:
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                return response.content
-        except requests.exceptions.RequestException:
-            continue
-    raise ValueError(f"Could not download package {name} version {version} from CRAN.")
 
 def _extract_urls(cran_data):
     """
@@ -325,15 +255,9 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     yaml.preserve_quotes = True
 
     template = yaml.load(template_path.read_text())
-    metadata_all = get_cran_data(name)
-    version = ensure_version(metadata_all, desired_version=kwargs.get("version"))
-
-    # get the metadata for the specific version
-    metadata = metadata_all.get("versions", {})[version]
-
-    # extract the highest version if not provided, otherwise
-    # ensure user provided version is valid
-
+    # desired_version might be None, ie take the highest version number
+    desired_version = kwargs.get("version") 
+    metadata = get_pkg_description(pkg_name=name, desired_version=desired_version)
 
     cran_name = metadata.get("Package")
     
@@ -344,7 +268,11 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     title = metadata.get("Title")
     description = metadata.get("Description")
     version = metadata.get("Version")
-    pkg_blob = download_pkg(metadata)
+    name = metadata.get("Package")
+    if not version or not name:
+        raise ValueError("CRAN data must contain 'Package' and 'Version' fields.")
+    
+    pkg_blob = dowload_pkg_from_cran(name=name, version=version)
     sha256 = get_pkg_sha256(pkg_blob)
 
     # untargz
@@ -435,11 +363,19 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
         f.write(f"print('... {cran_name} package loaded successfully')\n\n")
 
 
-        # try to extract examples from the CRAN reference manual
-        examples = extract_cran_examples(cran_name)
+        logger.debug(f"metadata['_is_archived'] = {metadata.get('_is_archived')}")
 
-        # filter out all examples containing "Not run" or "dontrun" (case insensitive)
-        examples = [ex for ex in examples if not re.search(r"Not run|dontrun", ex["example"], re.IGNORECASE)]
+        if not metadata["_is_archived"]:
+
+            # try to extract examples from the CRAN reference manual
+            examples = extract_cran_examples(cran_name)
+
+            # filter out all examples containing "Not run" or "dontrun" (case insensitive)
+            examples = [ex for ex in examples if not re.search(r"Not run|dontrun", ex["example"], re.IGNORECASE)]
+        
+        else:
+            # for archived pkgs there seems to be no examples
+            examples = []
 
         for i, example in enumerate(examples, start=1):
             ex = indent(example["example"].rstrip(), "    ")
