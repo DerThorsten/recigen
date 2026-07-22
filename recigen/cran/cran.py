@@ -361,7 +361,9 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
         f.write(f"print('Loading {cran_name} package')\n")
         f.write(f"library({cran_name})\n")
         f.write(f"print('... {cran_name} package loaded successfully')\n\n")
-        
+
+
+        logger.debug(f"metadata['_is_archived'] = {metadata.get('_is_archived')}")
 
         if not metadata["_is_archived"]:
 
