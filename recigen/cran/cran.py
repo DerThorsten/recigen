@@ -390,7 +390,7 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     ##############################
     # extra section
     ##############################
-    template["extra"]["recipe-maintainers"] = [kwargs["maintainer"]]
+    template["extra"]["recipe-maintainers"] = [kwargs.get("maintainer", "TODO-ADD-MAINTAINER")]
 
 
     # 3. Programmatically insert a blank line BEFORE the 'tests' key

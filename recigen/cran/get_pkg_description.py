@@ -26,7 +26,7 @@ from tqdm import tqdm
 import logging
 
 
-from rpy2.robjects import r
+from rpy2.robjects import r as r_lang
 
 # Creates a '.my_cache' directory in your project folder
 cache = Cache(".emscripten_forge_cran_cache")
@@ -146,8 +146,8 @@ def _get_exisiting_versions_for_archived_pkg(pkg_name):
 
         logger.info("extracting package %s", pkg_name)
 
-
-        r(f'''
+        logger.info("RUN R!!!!!!")
+        r_lang(f'''
         x <- readRDS("{rds_path}")
 
         if (!("{pkg_name}" %in% names(x))) {{
