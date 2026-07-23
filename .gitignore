@@ -136,3 +136,7 @@ cython_debug/
 
 # macOS
 .DS_Store
+# pixi environments
+.pixi/
+!.pixi/config.toml
+.emscripten_forge_cran_cache/

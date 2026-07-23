@@ -5,7 +5,6 @@ import requests
 from diskcache import Cache
 from pathlib import Path
 from ruamel.yaml import YAML
-import yaml
 from ..utils import  get_pkg_sha256
 from .licences import get_rpkg_licence_information
 import pprint
@@ -21,9 +20,8 @@ import tempfile
 import requests
 import gzip
 from bs4 import BeautifulSoup
-import subprocess
-import pandas as pd
 import email
+import pandas as pd
 
 from .get_pkg_description import get_pkg_description
 
