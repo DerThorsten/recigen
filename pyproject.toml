@@ -31,6 +31,17 @@ test = ["pytest"]
 all = ["recigen[test]"]
 
 
+[tool.pixi.dependencies]
+requests = "*"
+rpy2 = "*"
+beautifulsoup4 = "*"
+ruamel.yaml = "*"
+diskcache = "*"
+tqdm = "*"
+pandas = "*"
+r-base = "*"
+
+
 [tool.pixi.environments]
 default = {features = [], solve-group = "default"}
 test = {features = ["test"], solve-group = "default"}
