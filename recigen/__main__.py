@@ -28,6 +28,10 @@ def main():
     parser.add_argument("--maintainer", help="name of the maintainer of the package for which we want to generate the recipe", default=get_default_maintainer(), type=str)
     parser.add_argument("--version", help="version of the package for which we want to generate the recipe, if not provided, the latest version will be used")
 
+
+    # do we allow to create noarch pkgs
+    parser.add_argument("--allow-noarch", help="allow to create noarch packages (default: False)", action="store_true")
+
     # log level
     parser.add_argument("--log-level", help="set the log level (default: INFO)", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
     

@@ -213,19 +213,6 @@ def form_requirement(name, versioning_string):
         return f"{name} {versioning_string}"
 
 def inspect_sources(pkg_dir):
-    """
-    Inspects the source directory of an R package to determine if it contains C/C++ or Fortran code.
-
-    Parameters
-    ----------
-    pkg_dir : str or Path
-        Path to the root directory of the R package source.
-
-    Returns
-    -------
-    dict
-        A dictionary with keys 'has_c_cpp' and 'has_fortran', indicating the presence of C/C++ and Fortran code, respectively.
-    """
     pkg_dir = Path(pkg_dir)
     has_c_cpp = any(pkg_dir.rglob("*.c")) or any(pkg_dir.rglob("*.cpp")) or any(pkg_dir.rglob("*.cc"))
     has_fortran = any(pkg_dir.rglob("*.f")) or any(pkg_dir.rglob("*.f90")) or any(pkg_dir.rglob("*.f95"))
@@ -258,10 +245,13 @@ def generate_r_cran_recipe(name, package_type, outdir , **kwargs):
     metadata = get_pkg_description(pkg_name=name, desired_version=desired_version)
 
     cran_name = metadata.get("Package")
-    
+
     needs_compilation = metadata.get("NeedsCompilation", "no")
     if needs_compilation.lower() == "no":
-        raise ValueError(f"Package {name} does not need compilation. Only packages that need compilation are supported.")   
+        if kwargs.get("allow_noarch", False):
+            logger.info(f"Package {cran_name} needs compilation: {needs_compilation}. Proceeding with recipe generation.")   
+        else:
+            raise ValueError(f"Package {name} does not need compilation. Only packages that need compilation are supported.")
     
     title = metadata.get("Title")
     description = metadata.get("Description")

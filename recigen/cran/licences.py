@@ -35,7 +35,13 @@ spdx_license_mapping = {
     # Apache & Creative Commons
     "Apache License 2.0": "Apache-2.0",
     "Apache License (== 2.0)": "Apache-2.0",
+    "Apache License (>= 2)": "Apache-2.0",
     "CC0": "CC0-1.0",
+
+    # mozilla
+    "MPL-2 ": "MPL-2.0",
+    "MPL (>= 2)" : "MPL-2.0",
+
 
     # Unlimited
     "Unlimited": "LicenseRef-Unlimited",
@@ -44,7 +50,6 @@ spdx_license_mapping = {
 # r ships certain licences at  - ${{ PREFIX }}/lib/R/share/licenses/<>
 # here is a set of the files that are shipped with r-base at the folder $PREFIX/lib/R/share/licenses
 r_base_shipped_licenses = {
-    "Apache-2.0",
     "Artistic-2.0",
     "BSD_2_clause",
     "BSD_3_clause",
